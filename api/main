@@ -1,0 +1,55 @@
+"""FastAPI service.  Run: uvicorn api.main:app --reload   (docs at /docs)"""
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+
+from src.predict import load_bundle, predict
+
+
+class Customer(BaseModel):
+    gender: str = "Female"
+    SeniorCitizen: int = Field(0, ge=0, le=1)
+    Partner: str = "No"
+    Dependents: str = "No"
+    tenure: int = Field(..., ge=0, le=100, description="Months with the company")
+    PhoneService: str = "Yes"
+    MultipleLines: str = "No"
+    InternetService: str = "Fiber optic"
+    OnlineSecurity: str = "No"
+    OnlineBackup: str = "No"
+    DeviceProtection: str = "No"
+    TechSupport: str = "No"
+    StreamingTV: str = "No"
+    StreamingMovies: str = "No"
+    Contract: str = "Month-to-month"
+    PaperlessBilling: str = "Yes"
+    PaymentMethod: str = "Electronic check"
+    MonthlyCharges: float = Field(..., ge=0)
+    TotalCharges: float | str = Field(..., description="Use a number (blank allowed)")
+
+
+app = FastAPI(title="Churn Prediction API", version="1.0.0")
+
+
+@app.get("/health")
+def health():
+    try:
+        load_bundle()
+        return {"status": "ok"}
+    except FileNotFoundError as e:
+        raise HTTPException(503, str(e))
+
+
+@app.post("/predict")
+def predict_one(customer: Customer):
+    try:
+        return predict([customer.model_dump()])[0]
+    except FileNotFoundError as e:
+        raise HTTPException(503, str(e))
+
+
+@app.post("/predict/batch")
+def predict_batch(customers: list[Customer]):
+    try:
+        return predict([c.model_dump() for c in customers])
+    except FileNotFoundError as e:
+        raise HTTPException(503, str(e))
