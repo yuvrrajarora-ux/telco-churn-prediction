@@ -1,0 +1,56 @@
+"""Streamlit demo.  Run: streamlit run app/streamlit_app.py"""
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import streamlit as st
+
+from src.config import METRICS_PATH
+from src.predict import predict
+
+st.set_page_config(page_title="Churn Predictor", page_icon="📉", layout="wide")
+st.title("📉 Customer Churn Predictor")
+st.caption("Enter customer details to estimate the probability they will churn.")
+
+YN = ["Yes", "No"]
+ADDON = ["Yes", "No", "No internet service"]
+
+with st.sidebar:
+    st.header("Customer profile")
+    tenure = st.slider("Tenure (months)", 0, 72, 12)
+    contract = st.selectbox("Contract", ["Month-to-month", "One year", "Two year"])
+    internet = st.selectbox("Internet service", ["Fiber optic", "DSL", "No"])
+    monthly = st.number_input("Monthly charges", 0.0, 200.0, 80.0)
+    payment = st.selectbox("Payment method", ["Electronic check", "Mailed check",
+                                              "Bank transfer (automatic)", "Credit card (automatic)"])
+    paperless = st.selectbox("Paperless billing", YN)
+    senior = st.selectbox("Senior citizen", [0, 1])
+    security = st.selectbox("Online security", ADDON, index=1)
+    support = st.selectbox("Tech support", ADDON, index=1)
+
+record = {
+    "gender": "Female", "SeniorCitizen": senior, "Partner": "No", "Dependents": "No",
+    "tenure": tenure, "PhoneService": "Yes", "MultipleLines": "No", "InternetService": internet,
+    "OnlineSecurity": security, "OnlineBackup": "No", "DeviceProtection": "No",
+    "TechSupport": support, "StreamingTV": "No", "StreamingMovies": "No", "Contract": contract,
+    "PaperlessBilling": paperless, "PaymentMethod": payment, "MonthlyCharges": monthly,
+    "TotalCharges": round(monthly * max(tenure, 1), 2),
+}
+
+try:
+    result = predict([record])[0]
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Churn probability", f"{result['churn_probability']:.1%}")
+    c2.metric("Prediction", "Will churn" if result["churn_prediction"] else "Will stay")
+    c3.metric("Risk level", result["risk"].upper())
+    st.progress(result["churn_probability"])
+except FileNotFoundError as e:
+    st.error(str(e))
+
+if METRICS_PATH.exists():
+    with st.expander("Model performance (held-out test set)"):
+        m = json.loads(METRICS_PATH.read_text())
+        st.write({k: round(m[k], 3) for k in ["roc_auc", "pr_auc", "precision", "recall", "f1"]})
+        st.write(f"Best model: **{m['best_model']}**")
